@@ -363,7 +363,7 @@ If you use this repository, cite the manuscript and dataset source.
 }
 ```
 
-If a Zenodo DOI is created for this repository, update `CITATION.cff` and this README with the final DOI.
+The archived reproducibility package is available on Zenodo at: https://doi.org/10.5281/zenodo.21039501.
 
 ## License note
 
