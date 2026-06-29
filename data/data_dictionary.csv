@@ -1,0 +1,19 @@
+column_name,role,data_type,used_in_model,missing_value_handling,description
+core size (nm),target,numeric,yes,Rows with missing target are removed,Measured AgNP core size in nanometers.
+Process,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Synthesis process category.
+Steps,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Number or category of synthesis steps.
+External_energy,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,External energy condition used during synthesis.
+Temp_Celcius,feature,numeric,yes,Numeric imputation depends on scenario; baseline uses complete-case analysis,Synthesis temperature in degrees Celsius.
+Stirring,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Whether stirring was used or the stirring condition category.
+Synthesis_Duration_h,feature,numeric,yes,Numeric imputation depends on scenario; baseline uses complete-case analysis,Synthesis duration in hours.
+Scale_synthesis_ml,feature,numeric,yes,Numeric imputation depends on scenario; baseline uses complete-case analysis,Synthesis scale or volume in milliliters.
+Precurcor_conc_mM,feature,numeric,yes,Numeric imputation depends on scenario; baseline uses complete-case analysis,Precursor concentration in millimolar.
+NEW_Capping agent,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Capping agent used in synthesis.
+NEW_capping agent_Class,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Class/category of the capping agent.
+NEW_reducing agent,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Reducing agent used in synthesis.
+NEW_reducing agent_class,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Class/category of the reducing agent.
+Order of reagent_CODE,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Encoded order of reagent addition.
+Treatment,feature,categorical,yes,Categorical imputation by most frequent value when imputation scenarios are used,Post-synthesis or treatment condition.
+Stiring_Speed_rpm_,excluded_feature,numeric,no,Excluded before modelling,Excluded due to high missingness.
+Capping agent concentration (mg/mL),excluded_feature,numeric,no,Excluded before modelling,Excluded due to high missingness.
+Reducing agent quantity_Ml,excluded_feature,numeric,no,Excluded before modelling,Excluded due to high missingness.

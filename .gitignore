@@ -1,0 +1,85 @@
+# Python
+**pycache**/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.conda/
+conda-meta/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/settings.json
+.idea/
+
+# Runtime logs and temporary files
+*.log
+*.tmp
+*.temp
+~$*.docx
+~$*.xlsx
+*.bak
+
+# Large or regenerated model files
+*.joblib
+*.pkl
+*.pickle
+*.sav
+
+# Full generated outputs
+outputs/
+outputs_full/
+outputs_all/
+outputs_raw/
+outputs_temp/
+archive/
+*.zip
+
+# Manuscript and submission files
+manuscript/
+submission/
+cover_letter.docx
+response_to_reviewers.docx
+*.docx
+*.pdf
+
+# Raw or restricted data
+data/raw/
+data/original/
+data/*.xlsx
+data/*.xls
+data/*.csv
+
+# Allow selected data documentation
+!data/README.md
+!data/data_dictionary.csv
+
+# Selected public outputs
+outputs_selected/
+figures/
+tables/
+inverse_design/
+
+!outputs_selected/**
+!figures/**
+!tables/**
+!inverse_design/**
+
+# Environment lock/cache files
+pip-wheel-metadata/
+.tox/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# Jupyter execution artifacts
+.nb_checkpoints/
+*.nbconvert.ipynb

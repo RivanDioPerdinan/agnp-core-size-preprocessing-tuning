@@ -1,0 +1,15 @@
+name: agnp-core-size
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scikit-learn
+  - xgboost
+  - shap
+  - openpyxl
+  - joblib
+  - matplotlib
+  - ipython
+  - pip
