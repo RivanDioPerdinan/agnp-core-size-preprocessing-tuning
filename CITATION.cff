@@ -9,7 +9,8 @@ authors:
     given-names: Jasman
 repository-code: "https://github.com/RivanDioPerdinan/agnp-core-size-preprocessing-tuning"
 version: "1.0.0"
-date-released: "2026-06-27"
+doi: 10.5281/zenodo.21039501
+date-released: "2026-06-29"
 license: MIT
 keywords:
   - silver nanoparticles
