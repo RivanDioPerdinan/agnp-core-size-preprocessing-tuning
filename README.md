@@ -1,4 +1,4 @@
-# Effects of Preprocessing and Hyperparameter Tuning on Silver Nanoparticle Core Size Prediction
+# The Effect of Preprocessing and Hyperparameter Tuning on Core Size Prediction of Silver Nanoparticles
 
 This repository contains the source code, dataset placement instructions, and generated computational outputs for a machine-learning regression study on silver nanoparticle (AgNP) core size prediction. The workflow is prepared for journal submission and reproducible public archiving.
 
@@ -12,7 +12,7 @@ The workflow includes:
 - selection of 14 input features and one regression target;
 - duplicate removal and initial dataset audit;
 - 80:20 train-holdout split;
-- leakage-safe preprocessing inside cross-validation;
+- fold-wise preprocessing fitted only on the corresponding training fold to reduce preprocessing leakage risk;
 - baseline model evaluation;
 - single-preprocessing experiments;
 - combined-preprocessing experiments;
@@ -20,7 +20,7 @@ The workflow includes:
 - final 5-, 10-, and 15-fold cross-validation checks;
 - SHAP-based feature-importance interpretation;
 - explicit holdout prediction examples;
-- inverse-design candidate ranking.
+- optional exploratory inverse-design candidate ranking, which is not used in the manuscript analyses or conclusions.
 
 The evaluated regression models are:
 
@@ -106,7 +106,7 @@ The dataset uses `?` as a missing-value token, which is converted to `NaN` durin
 
 ## How to install dependencies
 
-Python 3.10 or newer is recommended.
+Python 3.12.3 is the reference Python version used to generate the reported computational outputs.
 
 ### Option 1: using pip
 
@@ -230,7 +230,7 @@ outputs/audit/                   Reviewer-audit files
 outputs/preprocessed_matrices/   Selected processed matrices
 outputs/models/                  Serialized trained model pipeline(s)
 outputs/predictions/             Holdout prediction tables
-outputs/inverse_design/          Inverse-design candidate ranking results
+outputs/inverse_design/          Exploratory inverse-design outputs not used in manuscript analyses or conclusions
 ```
 
 Important output files include:
@@ -256,7 +256,7 @@ archive/outputs.zip
 archive/outputs_reviewer_ready.zip
 ```
 
-If both archive ZIP files are byte-identical, one file is sufficient for public release.
+The archive/outputs.zip file contains the archived computational outputs associated with the final reproducibility package.
 
 ## Key reproduced metrics
 
@@ -273,9 +273,9 @@ The main manuscript-level results expected from the workflow are:
 | Categorical features | 10 |
 | Target variable | `core size (nm)` |
 | Total preprocessing and tuning scenarios | 18,624 |
-| Scenarios improving baseline CV R² | 5,191 |
-| Scenarios decreasing baseline CV R² | 13,365 |
-| Scenarios unchanged from baseline CV R² | 68 |
+| Scenarios improving baseline CV R² | 5,021 |
+| Scenarios decreasing baseline CV R² | 13,537 |
+| Scenarios unchanged from baseline CV R² | 66 |
 
 ### Baseline model examples
 
@@ -290,10 +290,10 @@ The main manuscript-level results expected from the workflow are:
 
 | Model | CV R² | Std CV R² | RMSE | MAE |
 |---|---:|---:|---:|---:|
-| Extra Trees Regression | 0.6159 | 0.0838 | 25.2461 | 15.0600 |
+| Extra Trees Regression | 0.6160 | 0.0836 | 25.2461 | 15.0600 |
 | Random Forest Regression | 0.6117 | 0.0635 | 25.4519 | 15.5902 |
 | XGBoost Regression | 0.6025 | 0.0755 | 25.9493 | 15.7180 |
-| SVR | 0.3366 | 0.1274 | 32.5344 | 20.4306 |
+| SVR | 0.3366 | 0.1274 | 32.4398 | 18.7987 |
 
 ### Best final model after hyperparameter tuning
 
@@ -309,8 +309,8 @@ Expected final performance:
 |---|---:|
 | CV R² | 0.6190 |
 | Std CV R² | 0.0677 |
-| RMSE | 26.0758 nm |
-| MAE | 15.8579 nm |
+| RMSE | 26.0754 nm |
+| MAE | 15.8576 nm |
 
 ### SHAP interpretation
 
@@ -342,12 +342,12 @@ If you use this repository, cite the manuscript and dataset source.
 ### Manuscript citation
 
 ```bibtex
-@article{perdinan_pardede_agnp_preprocessing_tuning,
+@article{perdinan_agnp_preprocessing_tuning,
   title   = {The Effect of Preprocessing and Hyperparameter Tuning on Core Size Prediction of Silver Nanoparticles},
-  author  = {Perdinan, Rivan Dio and Pardede, Jasman},
-  journal = {Journal of Experimental & Theoretical Artificial Intelligence},
+  author  = {Perdinan, Rivan Dio and Pardede, Jasman and Milenio, Rizka Milandga and Premitasari, Marisa},
+  journal = {Applied Artificial Intelligence},
   year    = {2026},
-  note    = {Manuscript submitted / under review}
+  note    = {Manuscript prepared for submission to Applied Artificial Intelligence}
 }
 ```
 
@@ -385,8 +385,8 @@ Recommended public-release options:
 2. If redistribution is not clearly permitted, remove the raw Excel file from the public repository and provide instructions for users to download it from the original publication DOI.
 3. Generated output files derived from the workflow can be released separately, but they should still cite the original dataset source.
 
-For double-anonymous journal review, avoid including public repository links that reveal author identity in the anonymous manuscript. Use an anonymized repository or provide the repository link only in the author-details file or after acceptance, depending on journal policy.
+The target journal, Applied Artificial Intelligence, uses single-anonymous peer review. Author identities therefore do not need to be removed under the journal’s peer-review policy. Authors should nevertheless follow the specific manuscript-file requirements provided by the Taylor & Francis submission portal.
 
 ## Contact
 
-For the author-details version of the manuscript, the corresponding author is listed in the submitted manuscript file. For anonymous review, contact details are intentionally omitted from the anonymized manuscript.
+For submission correspondence, the corresponding author and contact details are provided in the submitted manuscript and in the Taylor & Francis submission system.

@@ -5,10 +5,10 @@ Publication-ready reproducible workflow for AgNP core-size regression.
 
 This script is prepared as a source-code package for journal submission and public archiving.
 It executes the complete computational workflow used in the manuscript: dataset loading,
-feature selection, duplicate cleaning, train-holdout splitting, leakage-safe preprocessing,
+feature selection, duplicate cleaning, train-holdout splitting, fold-wise preprocessing designed to reduce preprocessing leakage,
 baseline evaluation, single and combined preprocessing experiments, hyperparameter tuning,
 final cross-validation, SHAP feature-importance interpretation, explicit holdout prediction,
-and inverse-design candidate search.
+and an exploratory inverse-design candidate search that is not used in the manuscript analyses or conclusions.
 
 Generated outputs follow a repository-friendly structure:
 
@@ -132,13 +132,13 @@ _RUNTIME_START_TIME = None
 # 3. Raw-data and modelling-dataset audits before model preprocessing.
 # 4. Target cleaning, exact-duplicate removal, and initial missing-value/outlier summaries.
 # 5. An 80:20 train-holdout split with log-target stratification bins.
-# 6. Leakage-safe preprocessing functions, model definitions, holdout evaluation, and K-Fold CV.
+# 6. Fold-wise preprocessing functions designed to reduce preprocessing leakage risk, model definitions, holdout evaluation, and K-Fold CV.
 # 7. Baseline snapshots before and after complete-case preprocessing.
 # 8. Baseline evaluation and target-transformation checks.
 # 9. Single-preprocessing experiments.
 # 10. Combined-preprocessing grid search.
 # 11. Hyperparameter tuning on the best preprocessing configuration per model.
-# 12. Baseline/preprocessing/tuning comparison, final K-Fold validation, SHAP feature-importance interpretation, explicit holdout prediction, and inverse-design candidate search.
+# 12. Baseline/preprocessing/tuning comparison, final K-Fold validation, SHAP feature-importance interpretation, explicit holdout prediction, and an exploratory inverse-design analysis not used in the manuscript conclusions.
 #
 # Models evaluated:
 # - Multiple Linear Regression (MLR)
@@ -1416,6 +1416,34 @@ def safe_json(obj):
     except Exception:
         return str(obj)
 
+def parse_model_params(value):
+    """
+    Mengubah Model_Params dari DataFrame menjadi dictionary
+    yang dapat diterapkan kembali pada sklearn Pipeline.
+    """
+    if value is None:
+        return {}
+
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, float) and np.isnan(value):
+        return {}
+
+    if isinstance(value, str):
+        value = value.strip()
+
+        if value in ["", "{}", "nan", "None"]:
+            return {}
+
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+    return {}
+
 
 # %% [cell 19]
 # ============================================================
@@ -2357,11 +2385,13 @@ save_table(
 # - Measure the effect of each preprocessing component separately.
 # - Each scenario changes only ONE component from the baseline.
 # - log1p target transformation is used only in the target-transformation scenario.
-# - CV_R2 and Holdout_R2 columns are made single/simplified:
-#   * Jika target_transform = none  -> pakai skor original.
-#   * Jika target_transform = log1p -> pakai skor transformed.
-# - Thus, log1p is evaluated on its own transformed scale and is not mixed
-#   with the original scale used in the main summary table.
+# - CV_R2 and Holdout_R2 always use performance on the original
+#   core-size scale so every preprocessing method is compared
+#   using the same evaluation scale.
+# - For log1p scenarios, predictions are inverse-transformed to
+#   nanometres before the main R2, RMSE, and MAE are calculated.
+# - Transformed-scale scores are retained only as supplementary
+#   diagnostic information.
 
 separate_results = []
 
@@ -2406,32 +2436,44 @@ TARGET_TRANSFORM_SCENARIOS = [
 
 def add_single_score_columns(row):
     """
-    Create a single score column so pure preprocessing tables are easier to read.
+    Compare all single-preprocessing scenarios on the original
+    core-size scale so the results remain directly comparable.
 
-    For target_transform = log1p scenarios:
-        CV_R2 and Holdout_R2 use transformed-scale scores.
-
-    For other scenarios:
-        CV_R2 and Holdout_R2 use original-scale scores.
-        For scenarios without target transformation, transformed and original scores are identical.
+    Transformed-scale scores are retained only as supplementary
+    diagnostics for log1p.
     """
 
-    target_transform = row.get("Target_Transform", "none")
+    row["CV_Train_R2"] = row[
+        "CV_Mean_Train_R2_Original"
+    ]
 
-    if target_transform == "log1p":
-        row["CV_Train_R2"] = row["CV_Mean_Train_R2_Transformed"]
-        row["CV_R2"] = row["CV_Mean_R2_Transformed"]
-        row["Train_R2"] = row["R2_Train_Transformed"]
-        row["Holdout_R2"] = row["R2_Test_Transformed"]
-        row["Train_Holdout_Gap_R2"] = row["Train_Test_Gap_R2_Transformed"]
-        row["Evaluation_Scale"] = "transformed_log1p"
-    else:
-        row["CV_Train_R2"] = row["CV_Mean_Train_R2_Original"]
-        row["CV_R2"] = row["CV_Mean_R2_Original"]
-        row["Train_R2"] = row["Train_R2_Original"]
-        row["Holdout_R2"] = row["Test_R2_Original"]
-        row["Train_Holdout_Gap_R2"] = row["Train_Test_Gap_R2_Original"]
-        row["Evaluation_Scale"] = "original"
+    row["CV_R2"] = row[
+        "CV_Mean_R2_Original"
+    ]
+
+    row["Train_R2"] = row[
+        "Train_R2_Original"
+    ]
+
+    row["Holdout_R2"] = row[
+        "Test_R2_Original"
+    ]
+
+    row["Train_Holdout_Gap_R2"] = row[
+        "Train_Test_Gap_R2_Original"
+    ]
+
+    row["Evaluation_Scale"] = "original_nm"
+
+    row["CV_R2_Transformed_Supplementary"] = row.get(
+        "CV_Mean_R2_Transformed",
+        np.nan,
+    )
+
+    row["Holdout_R2_Transformed_Supplementary"] = row.get(
+        "R2_Test_Transformed",
+        np.nan,
+    )
 
     return row
 
@@ -2751,9 +2793,9 @@ print("\nCatatan:")
 print("- This table shows pure single-preprocessing results.")
 print("- Each row changes only one component from the baseline.")
 print("- log1p target transformation is used only in the target-transformation component.")
-print("- CV_R2 and Holdout_R2 are the main scores according to the scenario evaluation scale.")
-print("- If Evaluation_Scale = original, the score is computed on the original nanometer scale.")
-print("- If Evaluation_Scale = transformed_log1p, the score is computed on the log1p target scale.")
+print("- CV_R2 and Holdout_R2 are always computed on the original nanometre scale.")
+print("- Log1p predictions are inverse-transformed before the main metrics are calculated.")
+print("- Transformed-scale metrics are retained only as supplementary diagnostics.")
 print("- RMSE_Original and MAE_Original are still displayed as original-scale error information.")
 
 
@@ -2922,8 +2964,10 @@ valid_combined_df = combined_preprocessing_df[
     np.isfinite(combined_preprocessing_df[PRIMARY_SELECTION_METRIC])
 ].copy()
 
-# Add a stability score so the best preprocessing is not selected only
-# based on the highest CV R2 while also considering the train-validation gap.
+# Add stability and overfitting indicators for supplementary audit.
+# The best preprocessing remains selected using the predefined
+# primary metric, CV_Mean_R2_Original, to maintain consistency
+# with the study objective.
 valid_combined_df = add_overfitting_control_scores(valid_combined_df)
 combined_preprocessing_df = add_overfitting_control_scores(combined_preprocessing_df)
 
@@ -3071,7 +3115,34 @@ for stage in stage_order:
 
     # Single-preprocessing ranking uses CV_R2,
     # according to the pure single-preprocessing summary table.
-    best_row = temp.sort_values("CV_R2", ascending=False).iloc[0].copy()
+    stage_df = separate_preprocessing_df[
+        separate_preprocessing_df["Stage"] == stage
+    ].copy()
+
+    method_column = stage_info[stage]["Parameter_Config"]
+
+    rank_matrix = (
+        stage_df
+        .pivot(
+            index="Model",
+            columns=method_column,
+            values="CV_Mean_R2_Original"
+        )
+        .rank(axis=1, ascending=False, method="average")
+    )
+
+    average_rank = rank_matrix.mean(axis=0).sort_values()
+
+    selected_method = average_rank.index[0]
+
+    method_rows = stage_df[
+        stage_df[method_column] == selected_method
+    ].copy()
+
+    best_row = method_rows.sort_values(
+        "CV_Mean_R2_Original",
+        ascending=False
+    ).iloc[0].copy()
 
     param_col = stage_info[stage]["Parameter_Config"]
     component_name = stage_info[stage]["Preprocessing_Component"]
@@ -3082,6 +3153,7 @@ for stage in stage_order:
         "Preprocessing_Component": component_name,
         "Parameter_Config": param_col,
         "Best_Method": selected_method,
+        "Average_Rank_Global": average_rank[selected_method],
         "Best_Model_In_Single_Preprocessing": best_row["Model"],
         "CV_R2_Single": best_row["CV_R2"],
         "Holdout_R2_Single": best_row["Holdout_R2"],
@@ -4382,6 +4454,566 @@ display(dominant_method_effect_by_model_df.head(60))
 print("Effect of tuning-parameter values:")
 display(parameter_effect_summary_df.head(30))
 
+# ============================================================
+# CELL 13H-A - SUPPLEMENTARY RANK ANALYSIS WITHIN COMBINED PREPROCESSING
+# ============================================================
+# This analysis is supplementary.
+# It tests whether preprocessing-method rankings differ across models.
+# Blocks = regression models.
+# Treatments = methods within each preprocessing component.
+# Metric = best CV R2 obtained by each method within the combined-preprocessing grid.
+
+import numpy as np
+import pandas as pd
+from scipy.stats import friedmanchisquare, rankdata, studentized_range, wilcoxon
+
+metric = "CV_Mean_R2_Original"
+
+# Use in-memory DataFrame if available; otherwise read from exported CSV.
+if "combined_preprocessing_df" in globals():
+    combined_df = combined_preprocessing_df.copy()
+else:
+    combined_df = pd.read_csv(TABLE_DIR / "11_combined_preprocessing_all_results.csv")
+
+def nemenyi_cd(k, n, alpha=0.05):
+    q_alpha = studentized_range.ppf(1 - alpha, k, 1e9) / np.sqrt(2)
+    return q_alpha * np.sqrt(k * (k + 1) / (6 * n))
+
+def friedman_nemenyi_by_component(df, component_col, metric_col):
+    pivot = (
+        df.groupby(["Model", component_col])[metric_col]
+        .max()
+        .unstack(component_col)
+    )
+
+    pivot = pivot.dropna(axis=0, how="any")
+    methods = list(pivot.columns)
+
+    if len(methods) < 3:
+        raise ValueError(f"Friedman Test requires at least 3 methods for {component_col}.")
+
+    stat, p_value = friedmanchisquare(*[pivot[m].values for m in methods])
+
+    rank_df = pivot.apply(
+        lambda row: pd.Series(rankdata(-row.values, method="average"), index=methods),
+        axis=1
+    )
+
+    avg_rank = rank_df.mean(axis=0).sort_values()
+    cd = nemenyi_cd(k=len(methods), n=pivot.shape[0], alpha=0.05)
+
+    nemenyi_pairs = []
+    for i, m1 in enumerate(avg_rank.index):
+        for m2 in avg_rank.index[i + 1:]:
+            diff = abs(avg_rank[m1] - avg_rank[m2])
+            nemenyi_pairs.append({
+                "Component": component_col,
+                "Method_1": m1,
+                "Method_2": m2,
+                "Average_Rank_Difference": diff,
+                "Critical_Difference": cd,
+                "Significant_Nemenyi_0_05": diff > cd,
+                "Interpret_Nemenyi": bool(p_value < 0.05)
+            })
+
+    summary = pd.DataFrame([{
+        "Component": component_col,
+        "Friedman_Statistic": stat,
+        "Friedman_p_value": p_value,
+        "N_Blocks": pivot.shape[0],
+        "N_Methods": len(methods),
+        "Nemenyi_Critical_Difference_0_05": cd,
+        "Run_Nemenyi_Interpretation": bool(p_value < 0.05),
+        "Block_Definition": "Model",
+        "Treatment_Definition": "Preprocessing method within component",
+        "Metric": metric_col,
+        "Important_Note": "Supplementary analysis; ranks are based on the best CV R2 obtained by each method inside the combined-preprocessing grid."
+    }])
+
+    avg_rank_df = avg_rank.reset_index()
+    avg_rank_df.columns = ["Method", "Average_Rank"]
+    avg_rank_df.insert(0, "Component", component_col)
+
+    nemenyi_df = pd.DataFrame(nemenyi_pairs)
+
+    return summary, avg_rank_df, nemenyi_df, pivot
+
+components = [
+    "Imputer_Mode",
+    "Scaler_Type",
+    "Target_Outlier_Mode",
+    "Feature_Outlier_Mode"
+]
+
+all_summary = []
+all_ranks = []
+all_nemenyi = []
+
+for comp in components:
+    summary, ranks, nemenyi, pivot = friedman_nemenyi_by_component(
+        combined_df,
+        component_col=comp,
+        metric_col=metric
+    )
+    all_summary.append(summary)
+    all_ranks.append(ranks)
+    all_nemenyi.append(nemenyi)
+
+friedman_summary_df = pd.concat(all_summary, ignore_index=True)
+average_rank_df = pd.concat(all_ranks, ignore_index=True)
+nemenyi_pairs_df = pd.concat(all_nemenyi, ignore_index=True)
+
+save_table(friedman_summary_df, "34a_friedman_summary_preprocessing_components.csv")
+save_table(average_rank_df, "34b_average_rank_preprocessing_methods.csv")
+save_table(nemenyi_pairs_df, "34c_nemenyi_pairwise_preprocessing_methods.csv")
+
+# Target transform has only two methods, so Wilcoxon is more appropriate than Friedman.
+target_pivot = (
+    combined_df.groupby(["Model", "Target_Transform"])[metric]
+    .max()
+    .unstack("Target_Transform")
+    .dropna(axis=0, how="any")
+)
+
+wilcoxon_stat, wilcoxon_p = wilcoxon(
+    target_pivot["log1p"],
+    target_pivot["none"],
+    alternative="two-sided"
+)
+
+target_transform_result = pd.DataFrame([{
+    "Component": "Target_Transform",
+    "Test": "Wilcoxon signed-rank",
+    "Statistic": wilcoxon_stat,
+    "p_value": wilcoxon_p,
+    "N_Blocks": target_pivot.shape[0],
+    "Block_Definition": "Model",
+    "Compared_Methods": "log1p vs none",
+    "Metric": metric,
+    "Conclusion": "Used because only two target-transform methods are available."
+}])
+
+save_table(target_transform_result, "34d_wilcoxon_target_transform.csv")
+
+print("Friedman summary:")
+display(friedman_summary_df)
+
+print("Average ranks:")
+display(average_rank_df)
+
+print("Nemenyi pairwise comparisons:")
+display(nemenyi_pairs_df)
+
+print("Wilcoxon target-transform result:")
+display(target_transform_result)
+
+# ============================================================
+# CELL 13H-B - PRIMARY FRIEDMAN, NEMENYI, AND WILCOXON ANALYSIS ON PURE SINGLE PREPROCESSING
+# ============================================================
+# Primary statistical analysis:
+# only one preprocessing component changes at a time.
+#
+# Blocks     = regression models
+# Treatments = methods within the same preprocessing component
+# Metric     = CV mean R2 on the original target scale
+# Source     = pure single-preprocessing experiment results
+
+import itertools
+import numpy as np
+import pandas as pd
+
+from scipy.stats import (
+    friedmanchisquare,
+    rankdata,
+    studentized_range,
+    wilcoxon,
+)
+
+metric = "CV_Mean_R2_Original"
+
+if "separate_preprocessing_df" in globals():
+    pure_single_df = separate_preprocessing_df.copy()
+else:
+    pure_single_df = pd.read_csv(
+        TABLE_DIR / "09_pure_single_preprocessing_results.csv"
+    )
+
+stage_component_map = {
+    "03_single_missing_value": {
+        "component": "Missing_Value",
+        "method_column": "Imputer_Mode",
+    },
+    "04_single_scaler": {
+        "component": "Scaling",
+        "method_column": "Scaler_Type",
+    },
+    "05_single_target_outlier": {
+        "component": "Target_Outlier",
+        "method_column": "Target_Outlier_Mode",
+    },
+    "06_single_feature_outlier": {
+        "component": "Feature_Outlier",
+        "method_column": "Feature_Outlier_Mode",
+    },
+}
+
+
+def nemenyi_cd(k: int, n: int, alpha: float = 0.05) -> float:
+    """Calculate the Nemenyi critical difference."""
+    q_alpha = (
+        studentized_range.ppf(1 - alpha, k, 1e9)
+        / np.sqrt(2)
+    )
+    return float(
+        q_alpha * np.sqrt(k * (k + 1) / (6 * n))
+    )
+
+
+def analyse_pure_single_component(
+    data: pd.DataFrame,
+    stage: str,
+    component_name: str,
+    method_column: str,
+    metric_column: str,
+):
+    stage_df = data.loc[data["Stage"] == stage].copy()
+
+    duplicate_count = stage_df.duplicated(
+        subset=["Model", method_column]
+    ).sum()
+
+    if duplicate_count > 0:
+        raise ValueError(
+            f"Duplicate model-method rows found for {component_name}: "
+            f"{duplicate_count}"
+        )
+
+    performance_matrix = stage_df.pivot(
+        index="Model",
+        columns=method_column,
+        values=metric_column,
+    ).dropna(axis=0, how="any")
+
+    methods = list(performance_matrix.columns)
+
+    if len(methods) < 3:
+        raise ValueError(
+            f"Friedman requires at least three methods: "
+            f"{component_name}"
+        )
+
+    statistic, p_value = friedmanchisquare(
+        *[
+            performance_matrix[method].to_numpy()
+            for method in methods
+        ]
+    )
+
+    rank_matrix = performance_matrix.apply(
+        lambda row: pd.Series(
+            rankdata(
+                -row.to_numpy(),
+                method="average",
+            ),
+            index=methods,
+        ),
+        axis=1,
+    )
+
+    average_rank = rank_matrix.mean(axis=0).sort_values()
+    critical_difference = nemenyi_cd(
+        k=len(methods),
+        n=performance_matrix.shape[0],
+        alpha=0.05,
+    )
+
+    summary = pd.DataFrame(
+        [
+            {
+                "Component": component_name,
+                "Friedman_Statistic": statistic,
+                "Friedman_p_value": p_value,
+                "N_Blocks": performance_matrix.shape[0],
+                "N_Methods": len(methods),
+                "Nemenyi_CD_0_05": critical_difference,
+                "Interpret_Nemenyi": bool(p_value < 0.05),
+                "Block_Definition": "Regression model",
+                "Treatment_Definition":
+                    "Pure single-preprocessing method",
+                "Metric": metric_column,
+                "Important_Note":
+                    "Only one preprocessing component changes; "
+                    "all other components remain fixed.",
+            }
+        ]
+    )
+
+    average_rank_df = average_rank.reset_index()
+    average_rank_df.columns = ["Method", "Average_Rank"]
+    average_rank_df.insert(0, "Component", component_name)
+
+    # Convert the performance and rank matrices into long format.
+    # Axis names are defined explicitly because rank_matrix produced
+    # through DataFrame.apply() may lose the original column-axis name.
+
+    performance_long = (
+        performance_matrix
+        .rename_axis(
+            index="Model",
+            columns="Method",
+        )
+        .stack()
+        .rename(metric_column)
+        .reset_index()
+    )
+
+    rank_long = (
+        rank_matrix
+        .rename_axis(
+            index="Model",
+            columns="Method",
+        )
+        .stack()
+        .rename("Rank")
+        .reset_index()
+    )
+
+    # Validate the expected columns before merging.
+    required_performance_columns = {
+        "Model",
+        "Method",
+        metric_column,
+    }
+
+    required_rank_columns = {
+        "Model",
+        "Method",
+        "Rank",
+    }
+
+    missing_performance_columns = (
+        required_performance_columns
+        - set(performance_long.columns)
+    )
+
+    missing_rank_columns = (
+        required_rank_columns
+        - set(rank_long.columns)
+    )
+
+    if missing_performance_columns:
+        raise KeyError(
+            "Missing columns in performance_long: "
+            f"{sorted(missing_performance_columns)}"
+        )
+
+    if missing_rank_columns:
+        raise KeyError(
+            "Missing columns in rank_long: "
+            f"{sorted(missing_rank_columns)}"
+        )
+
+    performance_rank_long = performance_long.merge(
+        rank_long,
+        on=["Model", "Method"],
+        how="left",
+        validate="one_to_one",
+    )
+
+    performance_rank_long.insert(
+        0,
+        "Component",
+        component_name,
+    )
+
+    nemenyi_rows = []
+
+    for method_1, method_2 in itertools.combinations(
+        average_rank.index,
+        2,
+    ):
+        rank_difference = abs(
+            average_rank[method_1]
+            - average_rank[method_2]
+        )
+
+        nemenyi_rows.append(
+            {
+                "Component": component_name,
+                "Method_1": method_1,
+                "Method_2": method_2,
+                "Average_Rank_Difference": rank_difference,
+                "Critical_Difference":
+                    critical_difference,
+                "Significant_Nemenyi_0_05":
+                    bool(
+                        p_value < 0.05
+                        and rank_difference
+                        > critical_difference
+                    ),
+                "Friedman_Significant":
+                    bool(p_value < 0.05),
+            }
+        )
+
+    nemenyi_df = pd.DataFrame(nemenyi_rows)
+
+    return (
+        summary,
+        average_rank_df,
+        performance_rank_long,
+        nemenyi_df,
+    )
+
+
+summary_frames = []
+average_rank_frames = []
+performance_rank_frames = []
+nemenyi_frames = []
+
+for stage, information in stage_component_map.items():
+    (
+        component_summary,
+        component_average_rank,
+        component_performance_rank,
+        component_nemenyi,
+    ) = analyse_pure_single_component(
+        data=pure_single_df,
+        stage=stage,
+        component_name=information["component"],
+        method_column=information["method_column"],
+        metric_column=metric,
+    )
+
+    summary_frames.append(component_summary)
+    average_rank_frames.append(component_average_rank)
+    performance_rank_frames.append(
+        component_performance_rank
+    )
+    nemenyi_frames.append(component_nemenyi)
+
+pure_friedman_summary_df = pd.concat(
+    summary_frames,
+    ignore_index=True,
+)
+
+pure_average_rank_df = pd.concat(
+    average_rank_frames,
+    ignore_index=True,
+)
+
+pure_performance_rank_df = pd.concat(
+    performance_rank_frames,
+    ignore_index=True,
+)
+
+pure_nemenyi_df = pd.concat(
+    nemenyi_frames,
+    ignore_index=True,
+)
+
+# ------------------------------------------------------------
+# Wilcoxon for target transformation: none versus log1p
+# ------------------------------------------------------------
+
+target_transform_df = pure_single_df.loc[
+    pure_single_df["Stage"]
+    == "07_single_target_transform"
+].copy()
+
+target_transform_matrix = target_transform_df.pivot(
+    index="Model",
+    columns="Target_Transform",
+    values=metric,
+).dropna(axis=0, how="any")
+
+wilcoxon_statistic, wilcoxon_p_value = wilcoxon(
+    target_transform_matrix["log1p"],
+    target_transform_matrix["none"],
+    alternative="two-sided",
+)
+
+target_transform_rank_matrix = (
+    target_transform_matrix.apply(
+        lambda row: pd.Series(
+            rankdata(
+                -row.to_numpy(),
+                method="average",
+            ),
+            index=target_transform_matrix.columns,
+        ),
+        axis=1,
+    )
+)
+
+target_transform_average_rank = (
+    target_transform_rank_matrix
+    .mean(axis=0)
+    .sort_values()
+)
+
+pure_wilcoxon_df = pd.DataFrame(
+    [
+        {
+            "Component": "Target_Transform",
+            "Test": "Wilcoxon signed-rank",
+            "Statistic": wilcoxon_statistic,
+            "p_value": wilcoxon_p_value,
+            "N_Blocks":
+                target_transform_matrix.shape[0],
+            "Block_Definition": "Regression model",
+            "Compared_Methods": "log1p vs none",
+            "Metric": metric,
+            "Average_Rank_None":
+                target_transform_average_rank["none"],
+            "Average_Rank_Log1p":
+                target_transform_average_rank["log1p"],
+            "Important_Note":
+                "Pure single-target-transformation comparison.",
+        }
+    ]
+)
+
+save_table(
+    pure_friedman_summary_df,
+    "34a_pure_single_friedman_summary.csv",
+)
+
+save_table(
+    pure_performance_rank_df,
+    "34b_pure_single_performance_and_rank_by_model.csv",
+)
+
+save_table(
+    pure_average_rank_df,
+    "34c_pure_single_average_rank.csv",
+)
+
+save_table(
+    pure_nemenyi_df,
+    "34d_pure_single_nemenyi_pairwise.csv",
+)
+
+save_table(
+    pure_wilcoxon_df,
+    "34e_pure_single_wilcoxon_target_transform.csv",
+)
+
+print("Pure single-preprocessing Friedman summary")
+display(pure_friedman_summary_df)
+
+print("Pure single-preprocessing performance and rank")
+display(pure_performance_rank_df)
+
+print("Pure single-preprocessing average ranks")
+display(pure_average_rank_df)
+
+print("Pure single-preprocessing Nemenyi results")
+display(pure_nemenyi_df)
+
+print("Pure single target-transform Wilcoxon result")
+display(pure_wilcoxon_df)
+
 
 # %% [cell 35]
 # ============================================================
@@ -5312,14 +5944,255 @@ joblib.dump({
 print("Best model saved:", model_path)
 print("Feature-outlier parameters saved:", len(feature_pkg_info.get("Feature_Outlier_Params", {})))
 
+# ============================================================
+# EXPORT SIX FINAL MODELS FOR FLASK
+# ============================================================
 
+MODEL_FILE_NAMES = {
+    "MLR": "mlr.joblib",
+    "Ridge Regression": "ridge.joblib",
+    "SVR": "svr.joblib",
+    "XGBoost": "xgboost.joblib",
+    "Extra Trees Regression": "extra_trees.joblib",
+    "Random Forest Regression": "random_forest.joblib",
+}
+
+
+def fit_and_export_final_model(final_row):
+    """
+    Melatih ulang satu model menggunakan kondisi final terbaiknya,
+    lalu menyimpan pipeline dan seluruh metadata preprocessing.
+    """
+    model_name = final_row["Model"]
+
+    imputer_mode = final_row["Imputer_Mode"]
+    scaler_type = final_row["Scaler_Type"]
+    target_transform = final_row["Target_Transform"]
+    target_outlier_mode = final_row["Target_Outlier_Mode"]
+    feature_outlier_mode = final_row["Feature_Outlier_Mode"]
+
+    model_params = parse_model_params(
+        final_row.get("Model_Params", {})
+    )
+
+    X_fit = X_train[FEATURE_COLS].copy()
+    y_fit = np.asarray(y_train, dtype=float)
+
+    # 1. Terapkan complete-case/drop jika merupakan kondisi terbaik model.
+    if imputer_mode == "drop":
+        complete_mask = ~X_fit.isna().any(axis=1)
+
+        missing_info = {
+            "Missing_Train_Dropped_Rows": int(
+                (~complete_mask).sum()
+            ),
+            "Complete_Case": True,
+        }
+
+        X_fit = X_fit.loc[complete_mask].copy()
+        y_fit = y_fit[complete_mask.to_numpy()]
+    else:
+        missing_info = {
+            "Missing_Train_Dropped_Rows": 0,
+            "Complete_Case": False,
+        }
+
+    # 2. Terapkan outlier target menggunakan data training.
+    keep_mask, y_fit, target_outlier_info = (
+        apply_target_outlier_to_training(
+            y_fit,
+            mode=target_outlier_mode,
+        )
+    )
+
+    if (
+        len(keep_mask) == len(X_fit)
+        and not np.all(keep_mask)
+    ):
+        X_fit = X_fit.loc[keep_mask].copy()
+
+    # 3. Hitung batas outlier fitur hanya dari data training.
+    X_fit, _, feature_outlier_info = (
+        apply_feature_outlier_fit_transform(
+            X_fit,
+            X_fit.copy(),
+            mode=feature_outlier_mode,
+        )
+    )
+
+    # 4. Transformasi target sesuai kondisi final model.
+    y_fit_transformed = transform_target(
+        y_fit,
+        mode=target_transform,
+    )
+
+    # 5. Bentuk pipeline preprocessing + model.
+    final_pipeline = build_full_pipeline(
+        model_name=model_name,
+        imputer_mode=imputer_mode,
+        scaler_type=scaler_type,
+        n_rows_for_quantile=len(X_fit),
+        selected_features=FEATURE_COLS,
+    )
+
+    if model_params:
+        final_pipeline.set_params(**model_params)
+
+    final_pipeline.fit(
+        X_fit,
+        y_fit_transformed,
+    )
+
+    metadata = {
+        "Model": model_name,
+        "Stage": final_row.get("Stage", ""),
+        "Tuned": bool(final_row.get("Tuned", False)),
+        "CV_Mean_R2_Original": float(
+            final_row.get("CV_Mean_R2_Original", np.nan)
+        ),
+        "CV_Std_R2_Original": float(
+            final_row.get("CV_Std_R2_Original", np.nan)
+        ),
+        "Test_R2_Original": float(
+            final_row.get("Test_R2_Original", np.nan)
+        ),
+        "Test_RMSE_Original": float(
+            final_row.get("Test_RMSE_Original", np.nan)
+        ),
+        "Test_MAE_Original": float(
+            final_row.get("Test_MAE_Original", np.nan)
+        ),
+        "Imputer_Mode": imputer_mode,
+        "Scaler_Type": scaler_type,
+        "Target_Transform": target_transform,
+        "Target_Outlier_Mode": target_outlier_mode,
+        "Feature_Outlier_Mode": feature_outlier_mode,
+        "Model_Params": model_params,
+        "Training_Rows_Final": int(len(X_fit)),
+    }
+
+    model_package = {
+        "pipeline": final_pipeline,
+        "metadata": metadata,
+        "feature_outlier_params": (
+            feature_outlier_info.get(
+                "Feature_Outlier_Params",
+                {},
+            )
+        ),
+        "missing_info": missing_info,
+        "target_outlier_info": target_outlier_info,
+        "feature_cols": FEATURE_COLS,
+        "numeric_cols": NUMERIC_COLS,
+        "categorical_cols": CATEGORICAL_COLS,
+        "target_col": TARGET_COL,
+        "target_display_name": TARGET_DISPLAY_NAME,
+        "target_unit": TARGET_UNIT,
+    }
+
+    output_path = MODEL_DIR / MODEL_FILE_NAMES[model_name]
+
+    joblib.dump(
+        model_package,
+        output_path,
+    )
+
+    return {
+        "Model": model_name,
+        "File": output_path.name,
+        "Path": str(output_path),
+        "CV_R2": metadata["CV_Mean_R2_Original"],
+        "Holdout_R2": metadata["Test_R2_Original"],
+        "Target_Transform": target_transform,
+        "Training_Rows_Final": len(X_fit),
+    }
+
+
+exported_model_rows = []
+
+for _, final_model_row in best_final_per_model.iterrows():
+    exported_model_rows.append(
+        fit_and_export_final_model(final_model_row)
+    )
+
+exported_models_df = pd.DataFrame(exported_model_rows)
+
+save_table(
+    exported_models_df,
+    "29_exported_models_for_flask.csv",
+)
+
+print("\nSIX FINAL MODELS EXPORTED FOR FLASK")
+display(exported_models_df)
+
+# ============================================================
+# EXPORT INPUT SCHEMA FOR FLASK
+# ============================================================
+
+input_schema = {
+    "target": {
+        "name": TARGET_COL,
+        "display_name": TARGET_DISPLAY_NAME,
+        "unit": TARGET_UNIT,
+    },
+    "feature_order": FEATURE_COLS,
+    "numeric_features": {},
+    "categorical_features": {},
+}
+
+for col in NUMERIC_COLS:
+    numeric_values = pd.to_numeric(
+        X_train[col],
+        errors="coerce",
+    ).dropna()
+
+    input_schema["numeric_features"][col] = {
+        "type": "number",
+        "required": True,
+        "minimum": float(numeric_values.min()),
+        "maximum": float(numeric_values.max()),
+        "median": float(numeric_values.median()),
+    }
+
+for col in CATEGORICAL_COLS:
+    categories = (
+        X_train[col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .sort_values()
+        .unique()
+        .tolist()
+    )
+
+    input_schema["categorical_features"][col] = {
+        "type": "category",
+        "required": True,
+        "allowed_values": categories,
+    }
+
+input_schema_path = MODEL_DIR / "input_schema.json"
+
+with open(
+    input_schema_path,
+    "w",
+    encoding="utf-8",
+) as file:
+    json.dump(
+        input_schema,
+        file,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+print("Input schema saved:", input_schema_path)
 
 # %% [markdown]
 # ## Additional analysis: inverse-system concept / inverse design
 #
-# The main study model is a forward model: synthesis parameters are inputs and core size is the output. The following cell adds a **candidate-search-based inverse design** mode: the user enters a target size, then the system ranks synthesis-parameter combinations predicted to be closest to that size.
+# The main study model is a forward model in which synthesis parameters are used as inputs and core size is the output. The following optional analysis performs a candidate-search-based inverse-design exploration by ranking observed synthesis-parameter combinations according to their predicted proximity to a user-specified target size.
 #
-# This is not a single mathematical inversion because many parameter combinations can produce similar sizes. Outputs should be treated as laboratory-experiment candidates, not guaranteed final recipes.
+# This exploratory analysis is not part of the manuscript's primary evaluation or conclusions. The ranked combinations are computational screening outputs only and should not be interpreted as validated synthesis recommendations, causal relationships, or laboratory recipes.
 
 
 # %% [cell 16A0]
@@ -5342,9 +6215,22 @@ INVERSE_DESIGN_TOP_N = 50
 
 
 def build_inverse_design_candidate_pool_from_observed_data():
-    """Safe candidate pool: synthesis-parameter combinations already observed in the data."""
-    pool = df_clean[FEATURE_COLS].drop_duplicates().reset_index(drop=True).copy()
-    pool["Candidate_ID"] = np.arange(1, len(pool) + 1)
+    """
+    Membentuk candidate pool hanya dari kombinasi parameter
+    yang tersedia pada data pelatihan.
+    """
+    pool = (
+        X_train[FEATURE_COLS]
+        .drop_duplicates()
+        .reset_index(drop=True)
+        .copy()
+    )
+
+    pool["Candidate_ID"] = np.arange(
+        1,
+        len(pool) + 1,
+    )
+
     return pool
 
 
@@ -6109,66 +6995,357 @@ print("- A large CV train-validation gap indicates that the model adapts too str
 print("- This audit does not change model selection; it is used only for manuscript discussion.")
 
 
-# %% [cell 47]
+# # %% [cell 47]
+# # ============================================================
+# # CELL 17 - NEW-DATA PREDICTION FUNCTION
+# # ============================================================
+
+# def load_best_model_package(model_path=MODEL_DIR / "best_overall_model.joblib"):
+#     return joblib.load(model_path)
+
+# def predict_new_experiment(new_data_dict, model_path=MODEL_DIR / "best_overall_model.joblib"):
+#     package = load_best_model_package(model_path)
+
+#     pipe = package["pipeline"]
+#     feature_cols = package["feature_cols"]
+#     feature_outlier_params = package.get("feature_outlier_params", {})
+
+#     new_df = pd.DataFrame([new_data_dict])
+
+#     for col in feature_cols:
+#         if col not in new_df.columns:
+#             new_df[col] = np.nan
+
+#     new_df = new_df[feature_cols].copy()
+
+#     for col in NUMERIC_COLS:
+#         if col in new_df.columns:
+#             new_df[col] = pd.to_numeric(new_df[col], errors="coerce")
+
+#     new_df = apply_feature_outlier_params(new_df, feature_outlier_params)
+
+#     pred_t = pipe.predict(new_df)
+
+#     target_transform = package["metadata"].get("Target_Transform", "none")
+#     pred_original = inverse_transform_target(pred_t, target_transform)
+
+#     return {
+#         "Prediction_Transformed": float(pred_t[0]),
+#         "Prediction_Core_Size_nm": float(pred_original[0]),
+#         "Target_Transform": target_transform
+#     }
+
+# print("The predict_new_experiment function is ready to use.")
+# print("Example:")
+
+# example_dict = {}
+
+# for c in FEATURE_COLS:
+#     non_missing = df_clean[c].dropna()
+#     if len(non_missing) == 0:
+#         example_val = np.nan
+#     elif c in CATEGORICAL_COLS:
+#         example_val = str(non_missing.iloc[0])
+#     else:
+#         example_val = float(non_missing.iloc[0])
+
+#     example_dict[c] = example_val
+
+# print("pred = predict_new_experiment({")
+# for k, v in example_dict.items():
+#     print(f"    {repr(k)}: {repr(v)},")
+# print("})")
+
 # ============================================================
-# CELL 17 - NEW-DATA PREDICTION FUNCTION
+# CELL 17 - SIX-MODEL NEW-DATA PREDICTION FUNCTION
 # ============================================================
 
-def load_best_model_package(model_path=MODEL_DIR / "best_overall_model.joblib"):
+MODEL_FILE_NAMES = {
+    "MLR": "mlr.joblib",
+    "Ridge Regression": "ridge.joblib",
+    "SVR": "svr.joblib",
+    "XGBoost": "xgboost.joblib",
+    "Extra Trees Regression": "extra_trees.joblib",
+    "Random Forest Regression": "random_forest.joblib",
+}
+
+
+def load_model_package(model_name):
+    if model_name not in MODEL_FILE_NAMES:
+        raise ValueError(
+            f"Unknown model: {model_name}. "
+            f"Available models: {list(MODEL_FILE_NAMES)}"
+        )
+
+    model_path = MODEL_DIR / MODEL_FILE_NAMES[model_name]
+
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"Model file was not found: {model_path}"
+        )
+
     return joblib.load(model_path)
 
-def predict_new_experiment(new_data_dict, model_path=MODEL_DIR / "best_overall_model.joblib"):
-    package = load_best_model_package(model_path)
 
-    pipe = package["pipeline"]
+def predict_with_selected_model(
+    new_data_dict,
+    model_name="Random Forest Regression",
+):
+    package = load_model_package(model_name)
+
     feature_cols = package["feature_cols"]
-    feature_outlier_params = package.get("feature_outlier_params", {})
+    numeric_cols = package["numeric_cols"]
 
-    new_df = pd.DataFrame([new_data_dict])
+    unexpected_columns = sorted(
+        set(new_data_dict) - set(feature_cols)
+    )
 
-    for col in feature_cols:
-        if col not in new_df.columns:
-            new_df[col] = np.nan
+    if unexpected_columns:
+        raise ValueError(
+            "Unexpected input columns: "
+            + ", ".join(unexpected_columns)
+        )
 
-    new_df = new_df[feature_cols].copy()
+    missing_columns = [
+        col
+        for col in feature_cols
+        if col not in new_data_dict
+    ]
 
-    for col in NUMERIC_COLS:
-        if col in new_df.columns:
-            new_df[col] = pd.to_numeric(new_df[col], errors="coerce")
+    if missing_columns:
+        raise ValueError(
+            "Required input columns are missing: "
+            + ", ".join(missing_columns)
+        )
 
-    new_df = apply_feature_outlier_params(new_df, feature_outlier_params)
+    new_df = pd.DataFrame(
+        [new_data_dict],
+        columns=feature_cols,
+    )
 
-    pred_t = pipe.predict(new_df)
+    for col in numeric_cols:
+        new_df[col] = pd.to_numeric(
+            new_df[col],
+            errors="coerce",
+        )
 
-    target_transform = package["metadata"].get("Target_Transform", "none")
-    pred_original = inverse_transform_target(pred_t, target_transform)
+        if new_df[col].isna().any():
+            raise ValueError(
+                f"Feature '{col}' must contain a valid number."
+            )
+
+    # Gunakan batas outlier fitur hasil fitting data training.
+    new_df = apply_feature_outlier_params(
+        new_df,
+        package.get("feature_outlier_params", {}),
+    )
+
+    prediction_transformed = package[
+        "pipeline"
+    ].predict(new_df)
+
+    target_transform = package[
+        "metadata"
+    ].get("Target_Transform", "none")
+
+    prediction_original = inverse_transform_target(
+        prediction_transformed,
+        mode=target_transform,
+    )
 
     return {
-        "Prediction_Transformed": float(pred_t[0]),
-        "Prediction_Core_Size_nm": float(pred_original[0]),
-        "Target_Transform": target_transform
+        "Model": model_name,
+        "Prediction_Core_Size_nm": float(
+            prediction_original[0]
+        ),
+        "Prediction_Transformed": float(
+            prediction_transformed[0]
+        ),
+        "Target_Transform": target_transform,
     }
 
-print("The predict_new_experiment function is ready to use.")
-print("Example:")
 
-example_dict = {}
+def predict_with_all_models(new_data_dict):
+    predictions = []
 
-for c in FEATURE_COLS:
-    non_missing = df_clean[c].dropna()
-    if len(non_missing) == 0:
-        example_val = np.nan
-    elif c in CATEGORICAL_COLS:
-        example_val = str(non_missing.iloc[0])
-    else:
-        example_val = float(non_missing.iloc[0])
+    for model_name in MODEL_FILE_NAMES:
+        predictions.append(
+            predict_with_selected_model(
+                new_data_dict=new_data_dict,
+                model_name=model_name,
+            )
+        )
 
-    example_dict[c] = example_val
+    return predictions
 
-print("pred = predict_new_experiment({")
-for k, v in example_dict.items():
-    print(f"    {repr(k)}: {repr(v)},")
-print("})")
+
+print("Six-model prediction functions are ready.")
+
+# ============================================================
+# FINAL SYSTEM SMOKE TEST
+# ============================================================
+
+print("\nRUNNING FINAL SYSTEM SMOKE TEST...")
+
+# ------------------------------------------------------------
+# 1. Pastikan enam model final tersedia
+# ------------------------------------------------------------
+
+expected_model_paths = {
+    model_name: MODEL_DIR / filename
+    for model_name, filename
+    in MODEL_FILE_NAMES.items()
+}
+
+missing_model_files = [
+    path.name
+    for path in expected_model_paths.values()
+    if not path.exists()
+]
+
+if missing_model_files:
+    raise FileNotFoundError(
+        "Model berikut belum berhasil dibuat: "
+        + ", ".join(missing_model_files)
+    )
+
+assert len(expected_model_paths) == 6, (
+    "Jumlah artefak model harus enam."
+)
+
+# ------------------------------------------------------------
+# 2. Pastikan input schema tersedia
+# ------------------------------------------------------------
+
+if not input_schema_path.exists():
+    raise FileNotFoundError(
+        f"Input schema tidak ditemukan: "
+        f"{input_schema_path}"
+    )
+
+with open(
+    input_schema_path,
+    "r",
+    encoding="utf-8",
+) as file:
+    tested_schema = json.load(file)
+
+assert tested_schema["feature_order"] == FEATURE_COLS, (
+    "Urutan fitur input schema tidak sama "
+    "dengan urutan fitur pelatihan."
+)
+
+assert len(tested_schema["feature_order"]) == 14, (
+    "Jumlah fitur pada input schema harus 14."
+)
+
+# ------------------------------------------------------------
+# 3. Ambil satu sampel input lengkap dari data training
+# ------------------------------------------------------------
+
+complete_training_rows = (
+    X_train[FEATURE_COLS]
+    .dropna()
+)
+
+if complete_training_rows.empty:
+    raise ValueError(
+        "Tidak tersedia baris training lengkap "
+        "untuk pengujian prediksi."
+    )
+
+smoke_test_input = (
+    complete_training_rows
+    .iloc[0]
+    .to_dict()
+)
+
+# Konversi tipe numerik menjadi float standar.
+for col in NUMERIC_COLS:
+    smoke_test_input[col] = float(
+        smoke_test_input[col]
+    )
+
+# Konversi kategori menjadi string standar.
+for col in CATEGORICAL_COLS:
+    smoke_test_input[col] = str(
+        smoke_test_input[col]
+    ).strip()
+
+# ------------------------------------------------------------
+# 4. Uji prediksi seluruh model
+# ------------------------------------------------------------
+
+smoke_test_predictions = (
+    predict_with_all_models(
+        smoke_test_input
+    )
+)
+
+assert len(smoke_test_predictions) == 6, (
+    "Prediksi harus dihasilkan oleh enam model."
+)
+
+for result in smoke_test_predictions:
+    prediction = result[
+        "Prediction_Core_Size_nm"
+    ]
+
+    if not np.isfinite(prediction):
+        raise ValueError(
+            f"Prediksi tidak valid dari "
+            f"{result['Model']}: {prediction}"
+        )
+
+# ------------------------------------------------------------
+# 5. Uji inverse design dengan model terbaik
+# ------------------------------------------------------------
+
+inverse_smoke_pool = (
+    build_inverse_design_candidate_pool_from_observed_data()
+    .head(5)
+    .copy()
+)
+
+inverse_smoke_results = (
+    predict_core_size_for_candidate_pool(
+        inverse_smoke_pool
+    )
+)
+
+if "Predicted_Core_Size_nm" not in (
+    inverse_smoke_results.columns
+):
+    raise KeyError(
+        "Kolom hasil inverse design tidak ditemukan."
+    )
+
+if not np.isfinite(
+    inverse_smoke_results[
+        "Predicted_Core_Size_nm"
+    ]
+).all():
+    raise ValueError(
+        "Inverse design menghasilkan "
+        "prediksi yang tidak valid."
+    )
+
+# ------------------------------------------------------------
+# 6. Tampilkan ringkasan pengujian
+# ------------------------------------------------------------
+
+print("\nFINAL SYSTEM SMOKE TEST: PASSED")
+print("Model files checked:", len(expected_model_paths))
+print("Input features checked:", len(FEATURE_COLS))
+print("Prediction results:", len(smoke_test_predictions))
+print(
+    "Inverse-design candidates checked:",
+    len(inverse_smoke_results),
+)
+
+display(
+    pd.DataFrame(smoke_test_predictions)
+)
 
 
 # %% [cell 48]
@@ -6340,7 +7517,7 @@ The main pipeline is unchanged:
 6. Single preprocessing.
 7. Combined preprocessing search.
 8. Hyperparameter tuning on the best preprocessing configuration for each model.
-9. Final K-Fold validation, holdout evaluation, SHAP feature importance, explicit prediction examples, inverse design, and overfitting audit.
+9. Final K-Fold validation, holdout evaluation, SHAP feature importance, explicit prediction examples, overfitting audit, and an optional exploratory inverse-design analysis not used in the manuscript conclusions.
 
 ## Important outputs
 

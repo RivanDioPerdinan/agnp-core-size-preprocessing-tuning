@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 title: "AgNP Core Size Preprocessing and Hyperparameter Tuning"
-message: "If you use this repository, please cite it using the metadata below. Update DOI and URL after Zenodo archiving."
+message: "If you use this repository, please cite it using the metadata below."
 type: software
 authors:
   - family-names: Perdinan
@@ -10,7 +10,7 @@ authors:
 repository-code: "https://github.com/RivanDioPerdinan/agnp-core-size-preprocessing-tuning"
 version: "1.0.0"
 doi: 10.5281/zenodo.21039501
-date-released: "2026-06-29"
+date-released: "2026-08-29"
 license: MIT
 keywords:
   - silver nanoparticles
