@@ -342,12 +342,11 @@ If you use this repository, cite the manuscript and dataset source.
 ### Manuscript citation
 
 ```bibtex
-@article{perdinan_agnp_preprocessing_tuning,
-  title   = {The Effect of Preprocessing and Hyperparameter Tuning on Core Size Prediction of Silver Nanoparticles},
-  author  = {Perdinan, Rivan Dio and Pardede, Jasman and Milenio, Rizka Milandga and Premitasari, Marisa},
-  journal = {Applied Artificial Intelligence},
-  year    = {2026},
-  note    = {Manuscript prepared for submission to Applied Artificial Intelligence}
+@article{pardede_agnp_preprocessing_tuning_2026,
+  title  = {The Effect of Preprocessing and Hyperparameter Tuning on Core Size Prediction of Silver Nanoparticles},
+  author = {Pardede, Jasman and Perdinan, Rivan Dio and Milandga Milenio, Rizka and Premitasari, Marisa},
+  year   = {2026},
+  note   = {Manuscript prepared for submission to PeerJ Computer Science}
 }
 ```
 
@@ -363,7 +362,7 @@ If you use this repository, cite the manuscript and dataset source.
 }
 ```
 
-The archived reproducibility package is available on Zenodo at: https://doi.org/10.5281/zenodo.21039501.
+The archived reproducibility package is available on Zenodo at: https://doi.org/10.5281/zenodo.22153591.
 
 ## License note
 
@@ -385,8 +384,8 @@ Recommended public-release options:
 2. If redistribution is not clearly permitted, remove the raw Excel file from the public repository and provide instructions for users to download it from the original publication DOI.
 3. Generated output files derived from the workflow can be released separately, but they should still cite the original dataset source.
 
-The target journal, Applied Artificial Intelligence, uses single-anonymous peer review. Author identities therefore do not need to be removed under the journal’s peer-review policy. Authors should nevertheless follow the specific manuscript-file requirements provided by the Taylor & Francis submission portal.
+The manuscript associated with this repository is currently prepared for submission to PeerJ Computer Science. Authors and users should refer to the current journal submission requirements for manuscript and supplementary-file preparation.
 
 ## Contact
 
-For submission correspondence, the corresponding author and contact details are provided in the submitted manuscript and in the Taylor & Francis submission system.
+For submission correspondence, the corresponding author and contact details are provided in the submitted manuscript and in the journal submission system.

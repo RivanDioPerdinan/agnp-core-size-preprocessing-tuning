@@ -393,7 +393,8 @@ def get_package_versions(package_names):
     return versions
 
 package_versions = get_package_versions([
-    "numpy", "pandas", "sklearn", "xgboost", "shap", "openpyxl", "joblib", "matplotlib"
+    "numpy", "pandas", "scipy", "sklearn", "xgboost", "shap",
+    "openpyxl", "joblib", "matplotlib"
 ])
 save_json(package_versions, "package_versions.json")
 
