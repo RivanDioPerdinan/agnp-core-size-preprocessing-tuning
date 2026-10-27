@@ -362,7 +362,7 @@ If you use this repository, cite the manuscript and dataset source.
 }
 ```
 
-The archived reproducibility package is available on Zenodo at: https://doi.org/10.5281/zenodo.22153591.
+The archived reproducibility package is available on Zenodo at: https://doi.org/10.5281/zenodo.23174793.
 
 ## License note
 

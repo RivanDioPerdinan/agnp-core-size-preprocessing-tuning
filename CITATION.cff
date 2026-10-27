@@ -13,8 +13,8 @@ authors:
     given-names: Marisa
 
 repository-code: "https://github.com/RivanDioPerdinan/agnp-core-size-preprocessing-tuning"
-version: "1.0.0"
-doi: 10.5281/zenodo.22153591
+version: "1.1.0"
+doi: 10.5281/zenodo.23174793
 date-released: "2026-08-29"
 license: MIT
 keywords:
